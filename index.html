@@ -25,10 +25,13 @@
       body {
         margin: 0;
         padding: 0;
+        height: 100%;
+        overflow: hidden;
       }
 
       body {
-        min-height: 100vh;
+        height: 100%;
+        min-height: 0;
         font-family:
           system-ui,
           -apple-system,
@@ -56,15 +59,26 @@
       }
 
       .page {
-        min-height: 100vh;
+        height: 100vh;
+        height: 100dvh;
+        min-height: 0;
         display: flex;
         flex-direction: column;
         padding: 20px 16px 44px;
+        overflow: hidden;
       }
 
       .container {
         width: min(1080px, 100%);
         margin: 0 auto;
+      }
+
+      main.container {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
       }
 
       .topbar {
@@ -162,6 +176,19 @@
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
         gap: 14px;
+        align-content: start;
+        grid-auto-rows: max-content;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-right: 4px;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+
+      .sites::-webkit-scrollbar {
+        display: none;
       }
 
       .site-card {
@@ -227,6 +254,15 @@
         border: 1px dashed var(--border);
         border-radius: 20px;
         line-height: 2;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+
+      .empty::-webkit-scrollbar {
+        display: none;
       }
 
       .hint {
@@ -883,17 +919,13 @@
               return response.json();
             })
             .then(function (data) {
-              if (data && data.sha) {
-                currentSha = data.sha;
-              }
-              return currentSha;
-            })
-            .catch(function () {
-              return currentSha;
+              var sha = data && data.sha ? data.sha : null;
+              currentSha = sha;
+              return sha;
             });
         }
 
-        function putFile(snapshot) {
+        function putFile(snapshot, sha) {
           var url =
             "https://api.github.com/repos/" +
             GITHUB_CONFIG.owner +
@@ -906,8 +938,8 @@
             content: encodeBase64(snapshot),
             branch: GITHUB_CONFIG.branch,
           };
-          if (currentSha) {
-            body.sha = currentSha;
+          if (sha) {
+            body.sha = sha;
           }
           return fetch(url, {
             method: "PUT",
@@ -935,6 +967,7 @@
               if (data.content && data.content.sha) {
                 currentSha = data.content.sha;
               }
+              return data;
             });
         }
 
@@ -943,8 +976,32 @@
             error &&
             (error.status === 409 || error.status === 422) &&
             error.message &&
-            error.message.indexOf("does not match") !== -1
+            (error.message.indexOf("does not match") !== -1 ||
+              error.message.toLowerCase().indexOf("sha") !== -1)
           );
+        }
+
+        function getLatestSha() {
+          return refreshCurrentSha().catch(function () {
+            return currentSha;
+          });
+        }
+
+        function pushWithRetry(snapshot, attemptsLeft) {
+          return getLatestSha()
+            .then(function (sha) {
+              return putFile(snapshot, sha);
+            })
+            .catch(function (error) {
+              if (shouldRetryShaMismatch(error) && attemptsLeft > 0) {
+                return new Promise(function (resolve) {
+                  window.setTimeout(function () {
+                    resolve(pushWithRetry(snapshot, attemptsLeft - 1));
+                  }, 300);
+                });
+              }
+              throw error;
+            });
         }
 
         function pushSitesToGitHub(list) {
@@ -952,18 +1009,7 @@
           ensureToken(function () {
             syncPromise = syncPromise
               .then(function () {
-                return refreshCurrentSha();
-              })
-              .then(function () {
-                return putFile(snapshot);
-              })
-              .catch(function (error) {
-                if (shouldRetryShaMismatch(error)) {
-                  return refreshCurrentSha().then(function () {
-                    return putFile(snapshot);
-                  });
-                }
-                throw error;
+                return pushWithRetry(snapshot, 3);
               })
               .catch(function (error) {
                 window.alert(
