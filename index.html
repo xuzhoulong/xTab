@@ -811,6 +811,7 @@
         var settings = readSettings();
         var pendingTokenCallback = null;
         var confirmCallback = null;
+        var appInitialized = false;
 
         function uid() {
           return (
@@ -1097,6 +1098,21 @@
                 );
               });
           });
+        }
+
+        function initializeApp() {
+          if (appInitialized) {
+            return;
+          }
+          var token = localStorage.getItem(TOKEN_KEY);
+          if (!token) {
+            openTokenModal(function () {
+              initializeApp();
+            });
+            return;
+          }
+          appInitialized = true;
+          loadSites();
         }
 
         function loadSites() {
@@ -1560,6 +1576,7 @@
 
           applySettingsToPage();
           closeSettingsModal();
+          initializeApp();
         });
 
         addForm.addEventListener("submit", function (event) {
@@ -1743,8 +1760,8 @@
 
         document.addEventListener("touchcancel", cancelLongPress);
 
-        loadSites();
         applySettingsToPage();
+        initializeApp();
         window.setInterval(updateClock, 1000);
       })();
     </script>
