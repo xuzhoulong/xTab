@@ -50,6 +50,9 @@
           linear-gradient(135deg, #0f172a, #1e293b);
         background-attachment: fixed;
         -webkit-tap-highlight-color: transparent;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
       }
 
       .page {
@@ -233,6 +236,13 @@
         font-size: 13px;
       }
 
+      input,
+      textarea {
+        -webkit-user-select: text;
+        user-select: text;
+        -webkit-touch-callout: default;
+      }
+
       .hidden {
         display: none !important;
       }
@@ -404,12 +414,12 @@
         <div id="sites" class="sites"></div>
         <div id="empty" class="empty hidden">
           还没有网址<br />
-          在页面空白处右键或长按，即可添加
+          右键或长按，即可打开菜单添加图标
         </div>
       </main>
 
       <div class="hint container">
-        右键 / 长按空白处添加网址 · 右键 / 长按卡片进行管理
+        右键 / 长按页面打开菜单
       </div>
     </div>
 
@@ -450,6 +460,34 @@
       </div>
     </div>
 
+    <div id="settingsModal" class="modal hidden">
+      <div
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settingsTitle"
+      >
+        <h2 id="settingsTitle">设置</h2>
+        <form id="settingsForm">
+          <div class="form-group">
+            <label for="tokenInput">GitHub Token</label>
+            <input
+              id="tokenInput"
+              type="password"
+              placeholder="ghp_..."
+              autocomplete="off"
+            />
+          </div>
+          <div class="dialog-actions">
+            <button id="settingsCancelBtn" class="btn btn-secondary" type="button">
+              取消
+            </button>
+            <button class="btn btn-primary" type="submit">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div id="menu" class="context-menu hidden"></div>
 
     <script>
@@ -471,6 +509,9 @@
         var nameInput = document.getElementById("nameInput");
         var urlInput = document.getElementById("urlInput");
         var menu = document.getElementById("menu");
+        var settingsModal = document.getElementById("settingsModal");
+        var settingsForm = document.getElementById("settingsForm");
+        var tokenInput = document.getElementById("tokenInput");
         var clockEl = document.getElementById("clock");
         var dateEl = document.getElementById("date");
         var addTitle = document.getElementById("addTitle");
@@ -841,24 +882,42 @@
           editingSiteId = null;
         }
 
+        function openSettingsModal() {
+          closeMenu();
+          tokenInput.value = localStorage.getItem(TOKEN_KEY) || "";
+          settingsModal.classList.remove("hidden");
+          window.setTimeout(function () {
+            tokenInput.focus();
+          }, 0);
+        }
+
+        function closeSettingsModal() {
+          settingsModal.classList.add("hidden");
+        }
+
         function closeMenu() {
           menu.classList.add("hidden");
           currentSiteId = null;
         }
 
         function showMenu(x, y, id) {
-          var site = sites.find(function (item) {
-            return item.id === id;
-          });
-          if (!site) {
-            return;
+          currentSiteId = id || null;
+          if (id) {
+            var site = sites.find(function (item) {
+              return item.id === id;
+            });
+            if (!site) {
+              return;
+            }
+            menu.innerHTML =
+              '<button class="menu-btn" data-action="open" type="button">打开网址</button>' +
+              '<button class="menu-btn" data-action="edit" type="button">编辑</button>' +
+              '<button class="menu-btn danger" data-action="delete" type="button">删除</button>';
+          } else {
+            menu.innerHTML =
+              '<button class="menu-btn" data-action="add" type="button">添加图标</button>' +
+              '<button class="menu-btn" data-action="settings" type="button">设置</button>';
           }
-
-          currentSiteId = id;
-          menu.innerHTML =
-            '<button class="menu-btn" data-action="open" type="button">打开网址</button>' +
-            '<button class="menu-btn" data-action="edit" type="button">编辑</button>' +
-            '<button class="menu-btn danger" data-action="delete" type="button">删除</button>';
 
           menu.classList.remove("hidden");
           menu.style.left = "0px";
@@ -950,6 +1009,24 @@
             closeAddModal();
           }
         });
+        document
+          .getElementById("settingsCancelBtn")
+          .addEventListener("click", closeSettingsModal);
+        settingsModal.addEventListener("click", function (event) {
+          if (event.target === settingsModal) {
+            closeSettingsModal();
+          }
+        });
+        settingsForm.addEventListener("submit", function (event) {
+          event.preventDefault();
+          var token = tokenInput.value.trim();
+          if (token) {
+            localStorage.setItem(TOKEN_KEY, token);
+          } else {
+            localStorage.removeItem(TOKEN_KEY);
+          }
+          closeSettingsModal();
+        });
 
         addForm.addEventListener("submit", function (event) {
           event.preventDefault();
@@ -1003,9 +1080,7 @@
         document.addEventListener("contextmenu", function (event) {
           event.preventDefault();
 
-          if (
-            event.target.closest("input, textarea, [contenteditable='true']")
-          ) {
+          if (event.target.closest(".context-menu")) {
             return;
           }
           if (Date.now() < suppressContextUntil) {
@@ -1015,8 +1090,8 @@
           var card = event.target.closest(".site-card");
           if (card) {
             showMenu(event.clientX, event.clientY, card.dataset.id);
-          } else if (!event.target.closest(".modal")) {
-            openAddModal();
+          } else {
+            showMenu(event.clientX, event.clientY);
           }
         });
 
@@ -1035,6 +1110,10 @@
             openEditSite(id);
           } else if (action === "delete") {
             deleteSite(id);
+          } else if (action === "add") {
+            openAddModal();
+          } else if (action === "settings") {
+            openSettingsModal();
           }
         });
 
@@ -1050,6 +1129,7 @@
           if (event.key === "Escape") {
             closeMenu();
             closeAddModal();
+            closeSettingsModal();
           }
         });
 
@@ -1074,14 +1154,18 @@
               longPressInfo.long = true;
               suppressContextUntil = Date.now() + 900;
 
+              if (
+                longPressInfo.target.closest("input, textarea, button, .modal")
+              ) {
+                return;
+              }
+
               var card = longPressInfo.target.closest(".site-card");
               if (card) {
                 ignoreCardClickUntil = Date.now() + 900;
                 showMenu(longPressInfo.x, longPressInfo.y, card.dataset.id);
-              } else if (
-                !longPressInfo.target.closest("input, textarea, button, .modal")
-              ) {
-                openAddModal();
+              } else {
+                showMenu(longPressInfo.x, longPressInfo.y);
               }
 
               if (navigator.vibrate) {
