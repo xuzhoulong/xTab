@@ -273,6 +273,114 @@
         font-size: 20px;
       }
 
+      .settings-dialog {
+        width: min(680px, 100%);
+      }
+
+      .settings-layout {
+        display: flex;
+        gap: 20px;
+      }
+
+      .settings-tabs {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        width: 120px;
+        flex: 0 0 120px;
+        border-right: 1px solid var(--border);
+        padding-right: 16px;
+      }
+
+      .settings-tab {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        text-align: left;
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      .settings-tab:hover {
+        background: #1e293b;
+      }
+
+      .settings-tab.active {
+        background: var(--primary);
+        color: #fff;
+      }
+
+      .settings-panels {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .settings-panel {
+        display: none;
+      }
+
+      .settings-panel.active {
+        display: block;
+      }
+
+      .settings-panel h3 {
+        margin: 0 0 16px;
+        font-size: 16px;
+      }
+
+      .setting-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      .setting-row label {
+        color: var(--text);
+        font-size: 14px;
+      }
+
+      .setting-row input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--primary);
+      }
+
+      .setting-row select {
+        min-width: 130px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #0f172a;
+        color: var(--text);
+        padding: 8px 10px;
+        font-size: 14px;
+        outline: 0;
+      }
+
+      @media (max-width: 640px) {
+        .settings-layout {
+          flex-direction: column;
+        }
+
+        .settings-tabs {
+          flex-direction: row;
+          width: 100%;
+          flex: none;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+          padding-right: 0;
+          padding-bottom: 10px;
+        }
+
+        .settings-tab {
+          flex: 1;
+          text-align: center;
+        }
+      }
+
       .form-group {
         margin-bottom: 14px;
       }
@@ -394,6 +502,7 @@
         <div id="clock" class="clock">00:00</div>
         <div id="date" class="date">加载中...</div>
         <form
+          id="searchForm"
           class="search"
           action="https://www.baidu.com/s"
           method="get"
@@ -462,21 +571,70 @@
 
     <div id="settingsModal" class="modal hidden">
       <div
-        class="dialog"
+        class="dialog settings-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="settingsTitle"
       >
         <h2 id="settingsTitle">设置</h2>
         <form id="settingsForm">
-          <div class="form-group">
-            <label for="tokenInput">GitHub Token</label>
-            <input
-              id="tokenInput"
-              type="password"
-              placeholder="ghp_..."
-              autocomplete="off"
-            />
+          <div class="settings-layout">
+            <div class="settings-tabs" id="settingsTabs">
+              <button class="settings-tab active" type="button" data-tab="time">时间</button>
+              <button class="settings-tab" type="button" data-tab="search">搜索</button>
+              <button class="settings-tab" type="button" data-tab="token">Token</button>
+            </div>
+            <div class="settings-panels">
+              <section class="settings-panel active" data-panel="time">
+                <h3>时间</h3>
+                <div class="setting-row">
+                  <label for="showTimeInput">显示时间</label>
+                  <input id="showTimeInput" type="checkbox" />
+                </div>
+                <div class="setting-row">
+                  <label for="showMonthDayInput">显示月日</label>
+                  <input id="showMonthDayInput" type="checkbox" />
+                </div>
+                <div class="setting-row">
+                  <label for="showWeekInput">显示星期</label>
+                  <input id="showWeekInput" type="checkbox" />
+                </div>
+                <div class="setting-row">
+                  <label for="showLunarInput">显示农历</label>
+                  <input id="showLunarInput" type="checkbox" />
+                </div>
+                <div class="setting-row">
+                  <label for="hourFormatInput">时间格式</label>
+                  <select id="hourFormatInput">
+                    <option value="24">24小时制</option>
+                    <option value="12">12小时制</option>
+                  </select>
+                </div>
+                <div class="setting-row">
+                  <label for="showSecondsInput">显示秒</label>
+                  <input id="showSecondsInput" type="checkbox" />
+                </div>
+              </section>
+              <section class="settings-panel" data-panel="search">
+                <h3>搜索</h3>
+                <div class="setting-row">
+                  <label for="showSearchInput">显示搜索框</label>
+                  <input id="showSearchInput" type="checkbox" />
+                </div>
+              </section>
+              <section class="settings-panel" data-panel="token">
+                <h3>Token</h3>
+                <div class="form-group">
+                  <label for="tokenInput">GitHub Token</label>
+                  <input
+                    id="tokenInput"
+                    type="password"
+                    placeholder="ghp_..."
+                    autocomplete="off"
+                  />
+                </div>
+              </section>
+            </div>
           </div>
           <div class="dialog-actions">
             <button id="settingsCancelBtn" class="btn btn-secondary" type="button">
@@ -502,6 +660,16 @@
         };
         var DEFAULT_SITES = [];
         var TOKEN_KEY = "xtab.github.token";
+        var SETTINGS_KEY = "xtab.settings.v1";
+        var DEFAULT_SETTINGS = {
+          showTime: true,
+          showMonthDay: true,
+          showWeek: true,
+          showLunar: true,
+          hour24: true,
+          showSeconds: true,
+          showSearch: true,
+        };
         var sitesEl = document.getElementById("sites");
         var emptyEl = document.getElementById("empty");
         var addModal = document.getElementById("addModal");
@@ -512,6 +680,16 @@
         var settingsModal = document.getElementById("settingsModal");
         var settingsForm = document.getElementById("settingsForm");
         var tokenInput = document.getElementById("tokenInput");
+        var searchForm = document.getElementById("searchForm");
+        var settingsTabs = document.querySelectorAll(".settings-tab");
+        var settingsPanels = document.querySelectorAll(".settings-panel");
+        var showTimeInput = document.getElementById("showTimeInput");
+        var showMonthDayInput = document.getElementById("showMonthDayInput");
+        var showWeekInput = document.getElementById("showWeekInput");
+        var showLunarInput = document.getElementById("showLunarInput");
+        var hourFormatInput = document.getElementById("hourFormatInput");
+        var showSecondsInput = document.getElementById("showSecondsInput");
+        var showSearchInput = document.getElementById("showSearchInput");
         var clockEl = document.getElementById("clock");
         var dateEl = document.getElementById("date");
         var addTitle = document.getElementById("addTitle");
@@ -526,6 +704,8 @@
         var longPressInfo = null;
         var suppressContextUntil = 0;
         var ignoreCardClickUntil = 0;
+        var editingSettings = null;
+        var settings = readSettings();
 
         function uid() {
           return (
@@ -559,8 +739,42 @@
           try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
           } catch (error) {
-            // 忽略本地存储不可用的情况
+            // ignore local storage errors
           }
+        }
+
+        function readSettings() {
+          var result = {};
+          Object.keys(DEFAULT_SETTINGS).forEach(function (key) {
+            result[key] = DEFAULT_SETTINGS[key];
+          });
+          try {
+            var raw = localStorage.getItem(SETTINGS_KEY);
+            if (raw) {
+              var data = JSON.parse(raw);
+              Object.keys(data).forEach(function (key) {
+                if (typeof DEFAULT_SETTINGS[key] !== "undefined") {
+                  result[key] = data[key];
+                }
+              });
+            }
+          } catch (error) {
+            // fall back to defaults
+          }
+          return result;
+        }
+
+        function saveSettingsToStorage() {
+          try {
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+          } catch (error) {
+            // ignore local storage errors
+          }
+        }
+
+        function applySettingsToPage() {
+          searchForm.classList.toggle("hidden", !settings.showSearch);
+          updateClock();
         }
 
         function decodeBase64(value) {
@@ -882,17 +1096,46 @@
           editingSiteId = null;
         }
 
+        function activateSettingsTab(tabName) {
+          Array.prototype.forEach.call(settingsTabs, function (tab) {
+            tab.classList.toggle("active", tab.dataset.tab === tabName);
+          });
+          Array.prototype.forEach.call(settingsPanels, function (panel) {
+            panel.classList.toggle("active", panel.dataset.panel === tabName);
+          });
+        }
+
+        function updateTimeSettingsDisabled() {
+          var disabled = !showTimeInput.checked;
+          showMonthDayInput.disabled = disabled;
+          showWeekInput.disabled = disabled;
+          showLunarInput.disabled = disabled;
+          hourFormatInput.disabled = disabled;
+          showSecondsInput.disabled = disabled;
+        }
+
         function openSettingsModal() {
           closeMenu();
+          editingSettings = readSettings();
           tokenInput.value = localStorage.getItem(TOKEN_KEY) || "";
+          showTimeInput.checked = editingSettings.showTime;
+          showMonthDayInput.checked = editingSettings.showMonthDay;
+          showWeekInput.checked = editingSettings.showWeek;
+          showLunarInput.checked = editingSettings.showLunar;
+          hourFormatInput.value = editingSettings.hour24 ? "24" : "12";
+          showSecondsInput.checked = editingSettings.showSeconds;
+          showSearchInput.checked = editingSettings.showSearch;
+          updateTimeSettingsDisabled();
+          activateSettingsTab("time");
           settingsModal.classList.remove("hidden");
           window.setTimeout(function () {
-            tokenInput.focus();
+            showTimeInput.focus();
           }, 0);
         }
 
         function closeSettingsModal() {
           settingsModal.classList.add("hidden");
+          editingSettings = null;
         }
 
         function closeMenu() {
@@ -972,10 +1215,93 @@
           closeMenu();
         }
 
+        function lunarDayText(day) {
+          var digits = [
+            "零",
+            "一",
+            "二",
+            "三",
+            "四",
+            "五",
+            "六",
+            "七",
+            "八",
+            "九",
+          ];
+          if (day === 10) {
+            return "初十";
+          }
+          if (day === 20) {
+            return "二十";
+          }
+          if (day === 30) {
+            return "三十";
+          }
+          if (day < 10) {
+            return "初" + digits[day];
+          }
+          if (day < 20) {
+            return "十" + digits[day % 10];
+          }
+          if (day < 30) {
+            return "廿" + digits[day % 10];
+          }
+          return "";
+        }
+
+        function getLunarText(date) {
+          try {
+            var parts = new Intl.DateTimeFormat("zh-CN-u-ca-chinese", {
+              month: "long",
+              day: "numeric",
+            }).formatToParts(date);
+            var month = "";
+            var day = "";
+            parts.forEach(function (part) {
+              if (part.type === "month") {
+                month = part.value;
+              }
+              if (part.type === "day") {
+                day = part.value;
+              }
+            });
+            return month + lunarDayText(parseInt(day, 10) || 0);
+          } catch (error) {
+            return "";
+          }
+        }
+
         function updateClock() {
+          if (!settings.showTime) {
+            clockEl.classList.add("hidden");
+            dateEl.classList.add("hidden");
+            return;
+          }
+
           var now = new Date();
-          var hours = String(now.getHours()).padStart(2, "0");
+          var hours = now.getHours();
           var minutes = String(now.getMinutes()).padStart(2, "0");
+          var seconds = String(now.getSeconds()).padStart(2, "0");
+          var suffix = "";
+
+          if (!settings.hour24) {
+            suffix = hours < 12 ? " AM" : " PM";
+            hours = hours % 12;
+            if (hours === 0) {
+              hours = 12;
+            }
+          }
+          hours = String(hours).padStart(2, "0");
+
+          var timeText = hours + ":" + minutes;
+          if (settings.showSeconds) {
+            timeText += ":" + seconds;
+          }
+          timeText += suffix;
+
+          clockEl.textContent = timeText;
+          clockEl.classList.remove("hidden");
+
           var weekdays = [
             "星期日",
             "星期一",
@@ -985,15 +1311,28 @@
             "星期五",
             "星期六",
           ];
-          clockEl.textContent = hours + ":" + minutes;
-          dateEl.textContent =
-            now.getFullYear() +
-            "年" +
-            (now.getMonth() + 1) +
-            "月" +
-            now.getDate() +
-            "日 " +
-            weekdays[now.getDay()];
+          var parts = [];
+          if (settings.showMonthDay) {
+            parts.push(
+              (now.getMonth() + 1) + "月" + now.getDate() + "日",
+            );
+          }
+          if (settings.showWeek) {
+            parts.push(weekdays[now.getDay()]);
+          }
+          if (settings.showLunar) {
+            var lunarText = getLunarText(now);
+            if (lunarText) {
+              parts.push("农历" + lunarText);
+            }
+          }
+
+          if (parts.length > 0) {
+            dateEl.textContent = parts.join(" · ");
+            dateEl.classList.remove("hidden");
+          } else {
+            dateEl.classList.add("hidden");
+          }
         }
 
         document
@@ -1017,14 +1356,34 @@
             closeSettingsModal();
           }
         });
+        Array.prototype.forEach.call(settingsTabs, function (tab) {
+          tab.addEventListener("click", function () {
+            activateSettingsTab(tab.dataset.tab);
+          });
+        });
+        showTimeInput.addEventListener("change", function () {
+          updateTimeSettingsDisabled();
+        });
         settingsForm.addEventListener("submit", function (event) {
           event.preventDefault();
+          editingSettings.showTime = showTimeInput.checked;
+          editingSettings.showMonthDay = showMonthDayInput.checked;
+          editingSettings.showWeek = showWeekInput.checked;
+          editingSettings.showLunar = showLunarInput.checked;
+          editingSettings.hour24 = hourFormatInput.value === "24";
+          editingSettings.showSeconds = showSecondsInput.checked;
+          editingSettings.showSearch = showSearchInput.checked;
+          settings = editingSettings;
+          saveSettingsToStorage();
+
           var token = tokenInput.value.trim();
           if (token) {
             localStorage.setItem(TOKEN_KEY, token);
           } else {
             localStorage.removeItem(TOKEN_KEY);
           }
+
+          applySettingsToPage();
           closeSettingsModal();
         });
 
@@ -1208,7 +1567,7 @@
         document.addEventListener("touchcancel", cancelLongPress);
 
         loadSites();
-        updateClock();
+        applySettingsToPage();
         window.setInterval(updateClock, 1000);
       })();
     </script>
