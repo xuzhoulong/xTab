@@ -406,19 +406,17 @@
 
   <script>
     (function () {
-      var STORAGE_KEY = "itab.sites.v1";
-      var DEFAULT_SITES = [
-        { id: "seed-github", name: "GitHub", url: "https://github.com" },
-        { id: "seed-bilibili", name: "哔哩哔哩", url: "https://www.bilibili.com" },
-        { id: "seed-zhihu", name: "知乎", url: "https://www.zhihu.com" },
-        { id: "seed-baidu", name: "百度", url: "https://www.baidu.com" },
-        { id: "seed-bing", name: "必应", url: "https://www.bing.com" },
-        { id: "seed-gmail", name: "Gmail", url: "https://mail.google.com" },
-        { id: "seed-youtube", name: "YouTube", url: "https://www.youtube.com" },
-        { id: "seed-juejin", name: "掘金", url: "https://juejin.cn" }
-      ];
-
-      var sitesEl = document.getElementById("sites");
+            var STORAGE_KEY = "itab.sites.v1";
+      var GITHUB_CONFIG = {
+        owner: "xuzhoulong",
+        repo: "0813-test",
+        path: "itab.json",
+        branch: "main",
+        token: ""
+      };
+      var DEFAULT_SITES = [];
+      var TOKEN_KEY = "itab.github.token";
+var sitesEl = document.getElementById("sites");
       var emptyEl = document.getElementById("empty");
       var addModal = document.getElementById("addModal");
       var addForm = document.getElementById("addForm");
@@ -428,7 +426,9 @@
       var clockEl = document.getElementById("clock");
       var dateEl = document.getElementById("date");
 
-      var sites = loadSites();
+            var sites = [];
+      var currentSha = null;
+      var syncPromise = Promise.resolve();
       var currentSiteId = null;
       var longPressTimer = null;
       var longPressInfo = null;
@@ -448,26 +448,156 @@
           .replace(/'/g, "&#39;");
       }
 
-      function loadSites() {
+            function readLocalSites() {
         try {
           var raw = localStorage.getItem(STORAGE_KEY);
-          if (raw === null) {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SITES));
-            return DEFAULT_SITES.slice();
+          if (!raw) {
+            return null;
           }
           var data = JSON.parse(raw);
-          return Array.isArray(data) ? data : [];
+          return Array.isArray(data) ? data : null;
         } catch (error) {
-          return [];
+          return null;
         }
       }
 
-      function saveSites() {
+      function saveLocalSites(list) {
         try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(sites));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
         } catch (error) {
-          // 存储不可用时忽略，页面仍可正常使用
+          // 忽略本地存储不可用的情况
         }
+      }
+
+      function decodeBase64(value) {
+        var cleaned = String(value || "").replace(/\s+/g, "");
+        var binary = atob(cleaned);
+        var bytes = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i += 1) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return new TextDecoder("utf-8").decode(bytes);
+      }
+
+      function encodeBase64(value) {
+        var bytes = new TextEncoder().encode(value);
+        var binary = "";
+        for (var i = 0; i < bytes.length; i += 1) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+      }
+
+      function githubApiHeaders() {
+        var token = localStorage.getItem(TOKEN_KEY) || "";
+        var headers = {
+          "Accept": "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28"
+        };
+        if (token) {
+          headers.Authorization = "Bearer " + token;
+        }
+        return headers;
+      }
+
+      function fetchRemoteSites(callback) {
+        var url = "https://api.github.com/repos/" + GITHUB_CONFIG.owner + "/" + GITHUB_CONFIG.repo + "/contents/" + GITHUB_CONFIG.path + "?ref=" + encodeURIComponent(GITHUB_CONFIG.branch);
+        fetch(url, { headers: githubApiHeaders() })
+          .then(function (response) {
+            if (response.status === 404) {
+              return null;
+            }
+            if (!response.ok) {
+              throw new Error("HTTP " + response.status);
+            }
+            return response.json();
+          })
+          .then(function (data) {
+            if (!data || !data.content) {
+              callback([]);
+              return;
+            }
+            currentSha = data.sha;
+            var text = decodeBase64(data.content);
+            var parsed = JSON.parse(text);
+            callback(Array.isArray(parsed) ? parsed : []);
+          })
+          .catch(function () {
+            callback(null);
+          });
+      }
+
+      function ensureToken(onReady) {
+        var token = localStorage.getItem(TOKEN_KEY);
+        if (token) {
+          onReady(token);
+          return;
+        }
+        var input = window.prompt("请输入 GitHub Personal Access Token（仅保存在本机浏览器，不会写入代码或仓库）：");
+        if (input && input.trim()) {
+          token = input.trim();
+          localStorage.setItem(TOKEN_KEY, token);
+          onReady(token);
+        } else {
+          window.alert("未输入 token，无法同步到 GitHub。");
+        }
+      }
+
+      function pushSitesToGitHub(list) {
+        var snapshot = JSON.stringify(list, null, 2);
+        ensureToken(function () {
+          syncPromise = syncPromise.then(function () {
+          var url = "https://api.github.com/repos/" + GITHUB_CONFIG.owner + "/" + GITHUB_CONFIG.repo + "/contents/" + GITHUB_CONFIG.path;
+          var body = {
+            message: "Update itab.json",
+            content: encodeBase64(snapshot),
+            branch: GITHUB_CONFIG.branch
+          };
+          if (currentSha) {
+            body.sha = currentSha;
+          }
+          return fetch(url, {
+            method: "PUT",
+            headers: Object.assign({ "Content-Type": "application/json" }, githubApiHeaders()),
+            body: JSON.stringify(body)
+          }).then(function (response) {
+            if (!response.ok) {
+              return response.json().then(function (error) {
+                throw new Error(error && error.message ? error.message : "HTTP " + response.status);
+              });
+            }
+            return response.json();
+          }).then(function (data) {
+            if (data.content && data.content.sha) {
+              currentSha = data.content.sha;
+            }
+          });
+        }).catch(function (error) {
+          window.alert("已保存到本机，但同步到 GitHub 失败：" + (error && error.message ? error.message : error));
+        });
+        });
+      }
+
+      function loadSites() {
+        var cached = readLocalSites();
+        if (cached) {
+          sites = cached;
+          render();
+        }
+        fetchRemoteSites(function (remote) {
+          if (remote) {
+            sites = remote;
+            saveLocalSites(sites);
+            render();
+          } else if (sites.length === 0) {
+            render();
+          }
+        });
+      }
+
+      function saveSites() {
+        saveLocalSites(sites);
+        pushSitesToGitHub(sites);
       }
 
       function hostname(url) {
@@ -753,9 +883,9 @@
 
       document.addEventListener("touchcancel", cancelLongPress);
 
+      loadSites();
       updateClock();
       window.setInterval(updateClock, 1000);
-      render();
     })();
   </script>
 </body>
