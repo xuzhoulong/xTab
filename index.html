@@ -425,11 +425,13 @@ var sitesEl = document.getElementById("sites");
       var menu = document.getElementById("menu");
       var clockEl = document.getElementById("clock");
       var dateEl = document.getElementById("date");
+      var addTitle = document.getElementById("addTitle");
 
             var sites = [];
       var currentSha = null;
       var syncPromise = Promise.resolve();
       var currentSiteId = null;
+      var editingSiteId = null;
       var longPressTimer = null;
       var longPressInfo = null;
       var suppressContextUntil = 0;
@@ -651,17 +653,24 @@ var sitesEl = document.getElementById("sites");
         return url.href;
       }
 
-      function openAddModal() {
+      function openAddModal(site) {
         closeMenu();
-        addForm.reset();
+        editingSiteId = site ? site.id : null;
+        addTitle.textContent = site ? "编辑网址" : "添加网址";
+        nameInput.value = site ? site.name : "";
+        urlInput.value = site ? site.url : "";
         addModal.classList.remove("hidden");
         window.setTimeout(function () {
           urlInput.focus();
+          if (site) {
+            urlInput.select();
+          }
         }, 0);
       }
 
       function closeAddModal() {
         addModal.classList.add("hidden");
+        editingSiteId = null;
       }
 
       function closeMenu() {
@@ -680,6 +689,7 @@ var sitesEl = document.getElementById("sites");
         currentSiteId = id;
         menu.innerHTML =
           '<button class="menu-btn" data-action="open" type="button">打开网址</button>' +
+          '<button class="menu-btn" data-action="edit" type="button">编辑</button>' +
           '<button class="menu-btn danger" data-action="delete" type="button">删除</button>';
 
         menu.classList.remove("hidden");
@@ -699,6 +709,15 @@ var sitesEl = document.getElementById("sites");
         });
         if (site) {
           window.open(site.url, "_blank", "noopener");
+        }
+      }
+
+      function openEditSite(id) {
+        var site = sites.find(function (item) {
+          return item.id === id;
+        });
+        if (site) {
+          openAddModal(site);
         }
       }
 
@@ -729,7 +748,7 @@ var sitesEl = document.getElementById("sites");
         dateEl.textContent = now.getFullYear() + "年" + (now.getMonth() + 1) + "月" + now.getDate() + "日 " + weekdays[now.getDay()];
       }
 
-      document.getElementById("addBtn").addEventListener("click", openAddModal);
+      document.getElementById("addBtn").addEventListener("click", function () { openAddModal(); });
       document.getElementById("cancelBtn").addEventListener("click", closeAddModal);
       addModal.addEventListener("click", function (event) {
         if (event.target === addModal) {
@@ -755,12 +774,24 @@ var sitesEl = document.getElementById("sites");
           return;
         }
 
-        var site = {
-          id: uid(),
-          name: name || hostname(url),
-          url: url
-        };
-        sites.push(site);
+        if (editingSiteId) {
+          var editIndex = sites.findIndex(function (item) {
+            return item.id === editingSiteId;
+          });
+          if (editIndex !== -1) {
+            sites[editIndex] = {
+              id: editingSiteId,
+              name: name || hostname(url),
+              url: url
+            };
+          }
+        } else {
+          sites.push({
+            id: uid(),
+            name: name || hostname(url),
+            url: url
+          });
+        }
         saveSites();
         render();
         closeAddModal();
@@ -803,6 +834,8 @@ var sitesEl = document.getElementById("sites");
 
         if (action === "open") {
           openSite(id);
+        } else if (action === "edit") {
+          openEditSite(id);
         } else if (action === "delete") {
           deleteSite(id);
         }
