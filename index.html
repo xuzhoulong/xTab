@@ -922,8 +922,10 @@
             "/contents/" +
             GITHUB_CONFIG.path +
             "?ref=" +
-            encodeURIComponent(GITHUB_CONFIG.branch);
-          fetch(url, { headers: githubApiHeaders() })
+            encodeURIComponent(GITHUB_CONFIG.branch) +
+            "&_=" +
+            Date.now();
+          fetch(url, { headers: githubApiHeaders(), cache: "no-store" })
             .then(function (response) {
               if (response.status === 404) {
                 return null;
@@ -981,8 +983,10 @@
             "/contents/" +
             GITHUB_CONFIG.path +
             "?ref=" +
-            encodeURIComponent(GITHUB_CONFIG.branch);
-          return fetch(url, { headers: githubApiHeaders() })
+            encodeURIComponent(GITHUB_CONFIG.branch) +
+            "&_=" +
+            Date.now();
+          return fetch(url, { headers: githubApiHeaders(), cache: "no-store" })
             .then(function (response) {
               if (response.status === 404) {
                 currentSha = null;
