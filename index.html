@@ -471,6 +471,17 @@
         color: #fff;
       }
 
+      .btn-danger {
+        background: var(--danger);
+        color: #fff;
+      }
+
+      .confirm-message {
+        margin: 0 0 8px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
       .context-menu {
         position: fixed;
         z-index: 50;
@@ -605,6 +616,54 @@
       </div>
     </div>
 
+    <div id="tokenModal" class="modal hidden">
+      <div
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tokenTitle"
+      >
+        <h2 id="tokenTitle">输入 GitHub Token</h2>
+        <form id="tokenForm">
+          <div class="form-group">
+            <label for="promptTokenInput">GitHub Token</label>
+            <input
+              id="promptTokenInput"
+              type="password"
+              placeholder="ghp_..."
+              autocomplete="off"
+            />
+          </div>
+          <div class="dialog-actions">
+            <button id="tokenCancelBtn" class="btn btn-secondary" type="button">
+              取消
+            </button>
+            <button class="btn btn-primary" type="submit">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="confirmModal" class="modal hidden">
+      <div
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirmTitle"
+      >
+        <h2 id="confirmTitle">确认删除</h2>
+        <p id="confirmMessage" class="confirm-message"></p>
+        <div class="dialog-actions">
+          <button id="confirmCancelBtn" class="btn btn-secondary" type="button">
+            取消
+          </button>
+          <button id="confirmOkBtn" class="btn btn-danger" type="button">
+            删除
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div id="settingsModal" class="modal hidden">
       <div
         class="dialog settings-dialog"
@@ -716,6 +775,14 @@
         var settingsModal = document.getElementById("settingsModal");
         var settingsForm = document.getElementById("settingsForm");
         var tokenInput = document.getElementById("tokenInput");
+        var tokenModal = document.getElementById("tokenModal");
+        var tokenForm = document.getElementById("tokenForm");
+        var promptTokenInput = document.getElementById("promptTokenInput");
+        var tokenCancelBtn = document.getElementById("tokenCancelBtn");
+        var confirmModal = document.getElementById("confirmModal");
+        var confirmMessage = document.getElementById("confirmMessage");
+        var confirmOkBtn = document.getElementById("confirmOkBtn");
+        var confirmCancelBtn = document.getElementById("confirmCancelBtn");
         var searchForm = document.getElementById("searchForm");
         var settingsTabs = document.querySelectorAll(".settings-tab");
         var settingsPanels = document.querySelectorAll(".settings-panel");
@@ -742,6 +809,8 @@
         var ignoreCardClickUntil = 0;
         var editingSettings = null;
         var settings = readSettings();
+        var pendingTokenCallback = null;
+        var confirmCallback = null;
 
         function uid() {
           return (
@@ -879,22 +948,28 @@
             });
         }
 
+        function openTokenModal(onDone) {
+          closeMenu();
+          pendingTokenCallback = onDone || null;
+          promptTokenInput.value = "";
+          tokenModal.classList.remove("hidden");
+          window.setTimeout(function () {
+            promptTokenInput.focus();
+          }, 0);
+        }
+
+        function closeTokenModal() {
+          tokenModal.classList.add("hidden");
+          pendingTokenCallback = null;
+        }
+
         function ensureToken(onReady) {
           var token = localStorage.getItem(TOKEN_KEY);
           if (token) {
             onReady(token);
             return;
           }
-          var input = window.prompt(
-            "请输入 GitHub Personal Access Token（仅保存在本机浏览器，不会写入代码或仓库）：",
-          );
-          if (input && input.trim()) {
-            token = input.trim();
-            localStorage.setItem(TOKEN_KEY, token);
-            onReady(token);
-          } else {
-            window.alert("未输入 token，无法同步到 GitHub。");
-          }
+          openTokenModal(onReady);
         }
 
         function refreshCurrentSha() {
@@ -1243,6 +1318,21 @@
           }
         }
 
+        function openConfirmModal(message, onConfirm) {
+          closeMenu();
+          confirmMessage.textContent = message;
+          confirmCallback = onConfirm || null;
+          confirmModal.classList.remove("hidden");
+          window.setTimeout(function () {
+            confirmOkBtn.focus();
+          }, 0);
+        }
+
+        function closeConfirmModal() {
+          confirmModal.classList.add("hidden");
+          confirmCallback = null;
+        }
+
         function deleteSite(id) {
           var site = sites.find(function (item) {
             return item.id === id;
@@ -1250,15 +1340,17 @@
           if (!site) {
             return;
           }
-          if (!window.confirm("确定删除「" + site.name + "」吗？")) {
-            return;
-          }
-          sites = sites.filter(function (item) {
-            return item.id !== id;
-          });
-          saveSites();
-          render();
-          closeMenu();
+          openConfirmModal(
+            "确定删除「" + site.name + "」吗？",
+            function () {
+              sites = sites.filter(function (item) {
+                return item.id !== id;
+              });
+              saveSites();
+              render();
+              closeMenu();
+            },
+          );
         }
 
         function lunarDayText(day) {
@@ -1402,6 +1494,39 @@
             closeSettingsModal();
           }
         });
+        tokenCancelBtn.addEventListener("click", closeTokenModal);
+        tokenModal.addEventListener("click", function (event) {
+          if (event.target === tokenModal) {
+            closeTokenModal();
+          }
+        });
+        tokenForm.addEventListener("submit", function (event) {
+          event.preventDefault();
+          var token = promptTokenInput.value.trim();
+          if (!token) {
+            promptTokenInput.focus();
+            return;
+          }
+          localStorage.setItem(TOKEN_KEY, token);
+          var callback = pendingTokenCallback;
+          closeTokenModal();
+          if (callback) {
+            callback(token);
+          }
+        });
+        confirmCancelBtn.addEventListener("click", closeConfirmModal);
+        confirmModal.addEventListener("click", function (event) {
+          if (event.target === confirmModal) {
+            closeConfirmModal();
+          }
+        });
+        confirmOkBtn.addEventListener("click", function () {
+          var callback = confirmCallback;
+          closeConfirmModal();
+          if (callback) {
+            callback();
+          }
+        });
         Array.prototype.forEach.call(settingsTabs, function (tab) {
           tab.addEventListener("click", function () {
             activateSettingsTab(tab.dataset.tab);
@@ -1535,6 +1660,8 @@
             closeMenu();
             closeAddModal();
             closeSettingsModal();
+            closeTokenModal();
+            closeConfirmModal();
           }
         });
 
