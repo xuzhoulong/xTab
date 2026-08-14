@@ -677,7 +677,7 @@
             <div class="settings-tabs" id="settingsTabs">
               <button class="settings-tab active" type="button" data-tab="time">时间</button>
               <button class="settings-tab" type="button" data-tab="search">搜索</button>
-              <button class="settings-tab" type="button" data-tab="token">Token</button>
+              <button class="settings-tab" type="button" data-tab="config">配置</button>
             </div>
             <div class="settings-panels">
               <section class="settings-panel active" data-panel="time">
@@ -717,8 +717,44 @@
                   <input id="showSearchInput" type="checkbox" />
                 </div>
               </section>
-              <section class="settings-panel" data-panel="token">
-                <h3>Token</h3>
+              <section class="settings-panel" data-panel="config">
+                <h3>配置</h3>
+                <div class="form-group">
+                  <label for="ownerInput">Owner</label>
+                  <input
+                    id="ownerInput"
+                    type="text"
+                    placeholder="例如：xuzhoulong"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="repoInput">Repo</label>
+                  <input
+                    id="repoInput"
+                    type="text"
+                    placeholder="例如：xTab"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="pathInput">数据文件路径</label>
+                  <input
+                    id="pathInput"
+                    type="text"
+                    placeholder="例如：xtab.json"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="branchInput">Branch</label>
+                  <input
+                    id="branchInput"
+                    type="text"
+                    placeholder="main"
+                    autocomplete="off"
+                  />
+                </div>
                 <div class="form-group">
                   <label for="tokenInput">GitHub Token</label>
                   <input
@@ -746,12 +782,12 @@
     <script>
       (function () {
         var STORAGE_KEY = "xtab.sites.v1";
-        var GITHUB_CONFIG = {
-          owner: "xuzhoulong",
-          repo: "xTab",
-          path: "xtab.json",
-          branch: "main",
-          token: "",
+        var CONFIG_KEY = "xtab.github.config";
+        var DEFAULT_GITHUB_CONFIG = {
+          owner: "",
+          repo: "",
+          path: "",
+          branch: "",
         };
         var DEFAULT_SITES = [];
         var TOKEN_KEY = "xtab.github.token";
@@ -775,6 +811,10 @@
         var settingsModal = document.getElementById("settingsModal");
         var settingsForm = document.getElementById("settingsForm");
         var tokenInput = document.getElementById("tokenInput");
+        var ownerInput = document.getElementById("ownerInput");
+        var repoInput = document.getElementById("repoInput");
+        var pathInput = document.getElementById("pathInput");
+        var branchInput = document.getElementById("branchInput");
         var tokenModal = document.getElementById("tokenModal");
         var tokenForm = document.getElementById("tokenForm");
         var promptTokenInput = document.getElementById("promptTokenInput");
@@ -809,6 +849,7 @@
         var ignoreCardClickUntil = 0;
         var editingSettings = null;
         var settings = readSettings();
+        var githubConfig = readGithubConfig();
         var pendingTokenCallback = null;
         var confirmCallback = null;
         var appInitialized = false;
@@ -870,6 +911,35 @@
           return result;
         }
 
+        function readGithubConfig() {
+          var result = {};
+          Object.keys(DEFAULT_GITHUB_CONFIG).forEach(function (key) {
+            result[key] = DEFAULT_GITHUB_CONFIG[key];
+          });
+          try {
+            var raw = localStorage.getItem(CONFIG_KEY);
+            if (raw) {
+              var data = JSON.parse(raw);
+              Object.keys(data).forEach(function (key) {
+                if (typeof DEFAULT_GITHUB_CONFIG[key] !== "undefined") {
+                  result[key] = data[key];
+                }
+              });
+            }
+          } catch (error) {
+            // fall back to defaults
+          }
+          return result;
+        }
+
+        function saveGithubConfig() {
+          try {
+            localStorage.setItem(CONFIG_KEY, JSON.stringify(githubConfig));
+          } catch (error) {
+            // ignore local storage errors
+          }
+        }
+
         function saveSettingsToStorage() {
           try {
             localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -917,13 +987,13 @@
         function fetchRemoteSites(callback) {
           var url =
             "https://api.github.com/repos/" +
-            GITHUB_CONFIG.owner +
+            githubConfig.owner +
             "/" +
-            GITHUB_CONFIG.repo +
+            githubConfig.repo +
             "/contents/" +
-            GITHUB_CONFIG.path +
+            githubConfig.path +
             "?ref=" +
-            encodeURIComponent(GITHUB_CONFIG.branch) +
+            encodeURIComponent(githubConfig.branch) +
             "&_=" +
             Date.now();
           fetch(url, { headers: githubApiHeaders(), cache: "no-store" })
@@ -978,13 +1048,13 @@
         function refreshCurrentSha() {
           var url =
             "https://api.github.com/repos/" +
-            GITHUB_CONFIG.owner +
+            githubConfig.owner +
             "/" +
-            GITHUB_CONFIG.repo +
+            githubConfig.repo +
             "/contents/" +
-            GITHUB_CONFIG.path +
+            githubConfig.path +
             "?ref=" +
-            encodeURIComponent(GITHUB_CONFIG.branch) +
+            encodeURIComponent(githubConfig.branch) +
             "&_=" +
             Date.now();
           return fetch(url, { headers: githubApiHeaders(), cache: "no-store" })
@@ -1008,15 +1078,15 @@
         function putFile(snapshot, sha) {
           var url =
             "https://api.github.com/repos/" +
-            GITHUB_CONFIG.owner +
+            githubConfig.owner +
             "/" +
-            GITHUB_CONFIG.repo +
+            githubConfig.repo +
             "/contents/" +
-            GITHUB_CONFIG.path;
+            githubConfig.path;
           var body = {
-            message: "Update xtab.json",
+            message: "Update " + githubConfig.path,
             content: encodeBase64(snapshot),
-            branch: GITHUB_CONFIG.branch,
+            branch: githubConfig.branch,
           };
           if (sha) {
             body.sha = sha;
@@ -1105,10 +1175,13 @@
             return;
           }
           var token = localStorage.getItem(TOKEN_KEY);
-          if (!token) {
-            openTokenModal(function () {
-              initializeApp();
-            });
+          var hasConfig =
+            githubConfig.owner &&
+            githubConfig.repo &&
+            githubConfig.path &&
+            githubConfig.branch;
+          if (!token || !hasConfig) {
+            openSettingsModal("config");
             return;
           }
           appInitialized = true;
@@ -1255,9 +1328,14 @@
           showSecondsInput.disabled = disabled;
         }
 
-        function openSettingsModal() {
+        function openSettingsModal(activeTab) {
           closeMenu();
+          activeTab = activeTab || "time";
           editingSettings = readSettings();
+          ownerInput.value = githubConfig.owner || "";
+          repoInput.value = githubConfig.repo || "";
+          pathInput.value = githubConfig.path || "";
+          branchInput.value = githubConfig.branch || "";
           tokenInput.value = localStorage.getItem(TOKEN_KEY) || "";
           showTimeInput.checked = editingSettings.showTime;
           showMonthDayInput.checked = editingSettings.showMonthDay;
@@ -1267,10 +1345,14 @@
           showSecondsInput.checked = editingSettings.showSeconds;
           showSearchInput.checked = editingSettings.showSearch;
           updateTimeSettingsDisabled();
-          activateSettingsTab("time");
+          activateSettingsTab(activeTab);
           settingsModal.classList.remove("hidden");
           window.setTimeout(function () {
-            showTimeInput.focus();
+            if (activeTab === "config") {
+              ownerInput.focus();
+            } else {
+              showTimeInput.focus();
+            }
           }, 0);
         }
 
@@ -1566,6 +1648,12 @@
           editingSettings.showSearch = showSearchInput.checked;
           settings = editingSettings;
           saveSettingsToStorage();
+
+          githubConfig.owner = ownerInput.value.trim();
+          githubConfig.repo = repoInput.value.trim();
+          githubConfig.path = pathInput.value.trim();
+          githubConfig.branch = branchInput.value.trim();
+          saveGithubConfig();
 
           var token = tokenInput.value.trim();
           if (token) {
