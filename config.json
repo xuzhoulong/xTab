@@ -1,5 +1,5 @@
 {
-  "showTime": true,
+  "showTime": false,
   "showMonthDay": true,
   "showWeek": true,
   "showLunar": true,
