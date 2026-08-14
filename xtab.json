@@ -13,5 +13,10 @@
     "id": "mssfd6g20cuopd",
     "name": "百度",
     "url": "https://www.baidu.com/"
+  },
+  {
+    "id": "mssmupx823zb2o",
+    "name": "deepseek",
+    "url": "https://chat.deepseek.com/"
   }
 ]
