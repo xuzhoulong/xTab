@@ -1664,7 +1664,20 @@
 
           applySettingsToPage();
           closeSettingsModal();
-          initializeApp();
+
+          if (appInitialized) {
+            var reloadToken = localStorage.getItem(TOKEN_KEY);
+            var reloadConfig =
+              githubConfig.owner &&
+              githubConfig.repo &&
+              githubConfig.path &&
+              githubConfig.branch;
+            if (reloadToken && reloadConfig) {
+              loadSites();
+            }
+          } else {
+            initializeApp();
+          }
         });
 
         addForm.addEventListener("submit", function (event) {
