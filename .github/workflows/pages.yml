@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths-ignore:
       - "xtab.json"
+      - "config.json"
 
 permissions:
   contents: read

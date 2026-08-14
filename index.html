@@ -947,6 +947,7 @@
         var DEFAULT_SITES = [];
         var TOKEN_KEY = "xtab.github.token";
         var SETTINGS_KEY = "xtab.settings.v1";
+        var SETTINGS_REMOTE_PATH = "config.json";
         var DEFAULT_SETTINGS = {
           showTime: true,
           showMonthDay: true,
@@ -1001,8 +1002,10 @@
 
         var sites = [];
         var currentSha = null;
+        var currentConfigSha = null;
         var syncPromise = Promise.resolve();
         var hasLocalChanges = false;
+        var hasLocalSettingsChanges = false;
         var currentSiteId = null;
         var editingSiteId = null;
         var longPressTimer = null;
@@ -1052,25 +1055,37 @@
           }
         }
 
-        function readSettings() {
+        function normalizeSettings(data) {
           var result = {};
           Object.keys(DEFAULT_SETTINGS).forEach(function (key) {
             result[key] = DEFAULT_SETTINGS[key];
           });
+          if (data && typeof data === "object") {
+            Object.keys(data).forEach(function (key) {
+              if (typeof DEFAULT_SETTINGS[key] !== "undefined") {
+                result[key] = data[key];
+              }
+            });
+          }
+          return result;
+        }
+
+        function readSettings() {
           try {
             var raw = localStorage.getItem(SETTINGS_KEY);
             if (raw) {
-              var data = JSON.parse(raw);
-              Object.keys(data).forEach(function (key) {
-                if (typeof DEFAULT_SETTINGS[key] !== "undefined") {
-                  result[key] = data[key];
-                }
-              });
+              return normalizeSettings(JSON.parse(raw));
             }
           } catch (error) {
             // fall back to defaults
           }
-          return result;
+          return normalizeSettings(null);
+        }
+
+        function hasSettingsChanged(left, right) {
+          return Object.keys(DEFAULT_SETTINGS).some(function (key) {
+            return Boolean(left[key]) !== Boolean(right[key]);
+          });
         }
 
         function readGithubConfig() {
@@ -1184,6 +1199,43 @@
             });
         }
 
+        function fetchRemoteSettingsConfig(callback) {
+          var url =
+            "https://api.github.com/repos/" +
+            githubConfig.owner +
+            "/" +
+            githubConfig.repo +
+            "/contents/" +
+            SETTINGS_REMOTE_PATH +
+            "?ref=" +
+            encodeURIComponent(githubConfig.branch) +
+            "&_=" +
+            Date.now();
+          fetch(url, { headers: githubApiHeaders(), cache: "no-store" })
+            .then(function (response) {
+              if (response.status === 404) {
+                return null;
+              }
+              if (!response.ok) {
+                throw new Error("HTTP " + response.status);
+              }
+              return response.json();
+            })
+            .then(function (data) {
+              if (!data || !data.content) {
+                callback(null);
+                return;
+              }
+              currentConfigSha = data.sha;
+              var text = decodeBase64(data.content);
+              var parsed = JSON.parse(text);
+              callback(normalizeSettings(parsed));
+            })
+            .catch(function () {
+              callback(null);
+            });
+        }
+
         function openTokenModal(onDone) {
           closeMenu();
           pendingTokenCallback = onDone || null;
@@ -1238,6 +1290,36 @@
             });
         }
 
+        function refreshConfigSha() {
+          var url =
+            "https://api.github.com/repos/" +
+            githubConfig.owner +
+            "/" +
+            githubConfig.repo +
+            "/contents/" +
+            SETTINGS_REMOTE_PATH +
+            "?ref=" +
+            encodeURIComponent(githubConfig.branch) +
+            "&_=" +
+            Date.now();
+          return fetch(url, { headers: githubApiHeaders(), cache: "no-store" })
+            .then(function (response) {
+              if (response.status === 404) {
+                currentConfigSha = null;
+                return null;
+              }
+              if (!response.ok) {
+                throw new Error("HTTP " + response.status);
+              }
+              return response.json();
+            })
+            .then(function (data) {
+              var sha = data && data.sha ? data.sha : null;
+              currentConfigSha = sha;
+              return sha;
+            });
+        }
+
         function putFile(snapshot, sha) {
           var url =
             "https://api.github.com/repos/" +
@@ -1284,6 +1366,52 @@
             });
         }
 
+        function putConfigFile(snapshot, sha) {
+          var url =
+            "https://api.github.com/repos/" +
+            githubConfig.owner +
+            "/" +
+            githubConfig.repo +
+            "/contents/" +
+            SETTINGS_REMOTE_PATH;
+          var body = {
+            message: "Update " + SETTINGS_REMOTE_PATH,
+            content: encodeBase64(snapshot),
+            branch: githubConfig.branch,
+          };
+          if (sha) {
+            body.sha = sha;
+          }
+          return fetch(url, {
+            method: "PUT",
+            headers: Object.assign(
+              { "Content-Type": "application/json" },
+              githubApiHeaders(),
+            ),
+            body: JSON.stringify(body),
+          })
+            .then(function (response) {
+              if (!response.ok) {
+                return response.json().then(function (error) {
+                  var requestError = new Error(
+                    error && error.message
+                      ? error.message
+                      : "HTTP " + response.status,
+                  );
+                  requestError.status = response.status;
+                  throw requestError;
+                });
+              }
+              return response.json();
+            })
+            .then(function (data) {
+              if (data.content && data.content.sha) {
+                currentConfigSha = data.content.sha;
+              }
+              return data;
+            });
+        }
+
         function shouldRetryShaMismatch(error) {
           return (
             error &&
@@ -1300,6 +1428,12 @@
           });
         }
 
+        function getLatestConfigSha() {
+          return refreshConfigSha().catch(function () {
+            return currentConfigSha;
+          });
+        }
+
         function pushWithRetry(snapshot, attemptsLeft) {
           return getLatestSha()
             .then(function (sha) {
@@ -1310,6 +1444,23 @@
                 return new Promise(function (resolve) {
                   window.setTimeout(function () {
                     resolve(pushWithRetry(snapshot, attemptsLeft - 1));
+                  }, 300);
+                });
+              }
+              throw error;
+            });
+        }
+
+        function pushConfigWithRetry(snapshot, attemptsLeft) {
+          return getLatestConfigSha()
+            .then(function (sha) {
+              return putConfigFile(snapshot, sha);
+            })
+            .catch(function (error) {
+              if (shouldRetryShaMismatch(error) && attemptsLeft > 0) {
+                return new Promise(function (resolve) {
+                  window.setTimeout(function () {
+                    resolve(pushConfigWithRetry(snapshot, attemptsLeft - 1));
                   }, 300);
                 });
               }
@@ -1333,7 +1484,27 @@
           });
         }
 
-        function initializeApp() {
+        function pushSettingsToGitHub(config) {
+          var snapshot = JSON.stringify(config, null, 2);
+          ensureToken(function () {
+            hasLocalSettingsChanges = true;
+            syncPromise = syncPromise
+              .then(function () {
+                return pushConfigWithRetry(snapshot, 3);
+              })
+              .then(function () {
+                hasLocalSettingsChanges = false;
+              })
+              .catch(function (error) {
+                window.alert(
+                  "已保存到本机，但同步到 GitHub 失败：" +
+                    (error && error.message ? error.message : error),
+                );
+              });
+          });
+        }
+
+        function initializeApp(skipSettingsLoad) {
           if (appInitialized) {
             return;
           }
@@ -1349,6 +1520,9 @@
           }
           appInitialized = true;
           loadSites();
+          if (!skipSettingsLoad) {
+            loadSettingsConfig();
+          }
         }
 
         function loadSites() {
@@ -1366,6 +1540,20 @@
               render();
             } else if (sites.length === 0) {
               render();
+            }
+          });
+        }
+
+        function loadSettingsConfig() {
+          fetchRemoteSettingsConfig(function (remote) {
+            if (remote) {
+              if (!hasLocalSettingsChanges) {
+                settings = remote;
+                saveSettingsToStorage();
+              }
+              applySettingsToPage();
+            } else {
+              applySettingsToPage();
             }
           });
         }
@@ -1861,6 +2049,7 @@
           editingSettings.showSearch = showSearchInput.checked;
           editingSettings.showSiteName = showSiteNameInput.checked;
           editingSettings.showSiteUrl = showSiteUrlInput.checked;
+          var settingsDirty = hasSettingsChanged(settings, editingSettings);
           settings = editingSettings;
           saveSettingsToStorage();
 
@@ -1877,21 +2066,26 @@
             localStorage.removeItem(TOKEN_KEY);
           }
 
+          var reloadToken = localStorage.getItem(TOKEN_KEY);
+          var reloadConfig =
+            githubConfig.owner &&
+            githubConfig.repo &&
+            githubConfig.path &&
+            githubConfig.branch;
+
           applySettingsToPage();
           closeSettingsModal();
 
+          if (reloadToken && reloadConfig && settingsDirty) {
+            pushSettingsToGitHub(settings);
+          }
+
           if (appInitialized) {
-            var reloadToken = localStorage.getItem(TOKEN_KEY);
-            var reloadConfig =
-              githubConfig.owner &&
-              githubConfig.repo &&
-              githubConfig.path &&
-              githubConfig.branch;
             if (reloadToken && reloadConfig) {
               loadSites();
             }
           } else {
-            initializeApp();
+            initializeApp(settingsDirty);
           }
         });
 
