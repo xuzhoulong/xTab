@@ -1,0 +1,11 @@
+{
+  "showTime": false,
+  "showMonthDay": true,
+  "showWeek": true,
+  "showLunar": true,
+  "hour24": true,
+  "showSeconds": true,
+  "showSearch": true,
+  "showSiteName": true,
+  "showSiteUrl": true
+}
