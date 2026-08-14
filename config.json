@@ -1,8 +1,8 @@
 {
   "showTime": true,
   "showMonthDay": true,
-  "showWeek": true,
-  "showLunar": true,
+  "showWeek": false,
+  "showLunar": false,
   "hour24": true,
   "showSeconds": true,
   "showSearch": false,
