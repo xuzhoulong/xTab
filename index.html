@@ -642,7 +642,7 @@
     <div class="page">
       <header class="topbar container">
         <div class="brand">xTab</div>
-        <button id="addBtn" class="add-btn" type="button">＋ 添加网址</button>
+        <button id="addBtn" class="add-btn" type="button">＋ 添加图标</button>
       </header>
 
       <section class="hero container">
@@ -684,7 +684,7 @@
         aria-modal="true"
         aria-labelledby="addTitle"
       >
-        <h2 id="addTitle">添加网址</h2>
+        <h2 id="addTitle">添加图标</h2>
         <form id="addForm">
           <div class="form-group">
             <label for="nameInput">网址名称</label>
@@ -780,7 +780,7 @@
                 搜索
               </button>
               <button class="settings-tab" type="button" data-tab="icon">
-                图标设置
+                图标
               </button>
               <button class="settings-tab" type="button" data-tab="config">
                 配置
@@ -858,7 +858,7 @@
                 </div>
               </section>
               <section class="settings-panel" data-panel="icon">
-                <h3>图标设置</h3>
+                <h3>图标</h3>
                 <div class="setting-row">
                   <label for="showSiteNameInput">显示网址名称</label>
                   <input id="showSiteNameInput" type="checkbox" />
@@ -1458,7 +1458,7 @@
         function openAddModal(site) {
           closeMenu();
           editingSiteId = site ? site.id : null;
-          addTitle.textContent = site ? "编辑网址" : "添加网址";
+          addTitle.textContent = site ? "编辑图标" : "添加图标";
           nameInput.value = site ? site.name : "";
           urlInput.value = site ? site.url : "";
           addModal.classList.remove("hidden");
